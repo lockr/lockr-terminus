@@ -1,0 +1,11 @@
+{
+    "name": "cellar-door/lockr",
+    "description": "The Lockr key management platform.",
+    "authors": [
+        {
+            "name": "Tynor Fujimoto",
+            "email": "tynor@lockr.io"
+        }
+    ],
+    "require": {}
+}
