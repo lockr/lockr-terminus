@@ -63,12 +63,11 @@ class Lockdown extends CommandWithSSH
             return;
         }
 
-        $this->callDrush('en -y devel', $site, 'dev');
+        $this->callDrush('en -y lockr', $site, 'dev');
         $this->callDrush('cc drush', $site, 'dev');
 
-        $this->commit($env, 'Devel module installed.');
+        $this->commit($env, 'Lockr module installed.');
 
-        return;
         $this->callDrush('lockdown', $site, 'dev');
 
         $this->commit($env, 'Lockr patches applied.');
