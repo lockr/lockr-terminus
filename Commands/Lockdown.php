@@ -51,7 +51,7 @@ class Lockdown extends CommandWithSSH
      */
     public function __invoke($args, $assoc_args)
     {
-        $this->helpers->auth->ensureLogin();
+        $this->ensureLogin();
         $sites = new Sites();
         $site = $sites->get(
             $this->input()->siteName(['args' => $assoc_args])
