@@ -4,11 +4,15 @@
 namespace Lockr\Commands;
 
 use Terminus\Commands\CommandWithSSH;
-use Terminus\Models\Collections\Sites;
+use Terminus\Commands\SiteCommand;
+use Terminus\Collections\Sites;
 
 /**
- * @command lockdown
+ * Allows for sites to register and communicate with Lockr
+ *
+ * 
  */
+ 
 class Lockdown extends CommandWithSSH
 {
     protected function callDrush($cmd, $site, $env) {
@@ -64,8 +68,10 @@ class Lockdown extends CommandWithSSH
      *
      * [--site=<site>]
      * : Site to lockdown.
+     *
+     * 
      */
-    public function __invoke($args, $assoc_args)
+    public function lockdown($args, $assoc_args)
     {
         $this->ensureLogin();
         $sites = new Sites();
@@ -73,10 +79,30 @@ class Lockdown extends CommandWithSSH
             $this->input()->siteName(['args' => $assoc_args])
         );
         $env = $site->environments->get('dev');
-
+				$git_mode = false;
+				
         if ($env->info('connection_mode') != 'sftp') {
-            $this->checkConnectionMode($env);
-            return;
+	        $git_mode = true;
+	        $connection_args = array('mode' => 'sftp');
+	        $connection_mode = $env->setConnectionMode(true, $connection_args);
+	        if(!$connection_mode){
+		        $this->log()->warning(
+	            "The site had an issue in changing from Git mode. Please check that the code repository is
+	            up to date and try again."
+	          );
+						return;
+	        }
+        } else {
+	        //Ensure we don't have any changed files we'll commit over top our commits.
+	        $diff = $env->diffstat();
+        	$count = count((array)$diff);
+        	if ($count !== 0){
+	        	$this->log()->warning(
+	            "Note: This site has changes to files that are not yet committed. If you want to install Lockr, 
+	            you will need to commit these changes first."
+	          );
+						return;
+        	}
         }
 
         $fmwk = $site->get('framework');
@@ -112,6 +138,15 @@ class Lockdown extends CommandWithSSH
                 $cmd .= " --password={$assoc_args['password']}";
             }
             $this->callWpCli($cmd, $site, 'dev');
+        }
+        
+        if ($git_mode){
+	        $diff = $env->diffstat();
+        	$count = count((array)$diff);
+        	if ($count === 0){
+	        	$connection_args = array('mode' => 'git');
+						$connection_mode = $env->setConnectionMode(true, $connection_args);
+        	}
         }
     }
 }
