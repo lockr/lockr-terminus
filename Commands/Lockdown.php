@@ -10,43 +10,13 @@ use Terminus\Collections\Sites;
 /**
  * Allows for sites to register and communicate with Lockr
  *
- * 
+ * @command lockdown
  */
- 
 class Lockdown extends CommandWithSSH
 {
-    protected function callDrush($cmd, $site, $env) {
-        $this->client = 'Drush';
-        $this->command = 'drush';
-
-        $this->checkCommand($cmd);
-
-        $elements = array(
-            'site' => $site,
-            'env_id' => $env,
-            'command' => $cmd,
-            'server' => $this->getAppserverInfo(
-                array('site' => $site->get('id'), 'environment' => $env)
-            ),
-        );
-
-        return $this->sendCommand($elements);
-    }
-
-    protected function callWpCli($cmd, $site, $env) {
-        $this->client = 'WP-CLI';
-        $this->command = 'wp';
-
-        $elements = array(
-            'site' => $site,
-            'env_id' => $env,
-            'command' => $cmd,
-            'server' => $this->getAppserverInfo(
-                array('site' => $site->get('id'), 'environment' => $env)
-            ),
-        );
-
-        return $this->sendCommand($elements);
+    protected function callCommand($cmd, $env) {
+        $this->ensureCommandIsPermitted($cmd);
+        $env->sendCommandViaSSH($cmd);
     }
 
     protected function commit($env, $msg) {
@@ -68,10 +38,8 @@ class Lockdown extends CommandWithSSH
      *
      * [--site=<site>]
      * : Site to lockdown.
-     *
-     * 
      */
-    public function lockdown($args, $assoc_args)
+    public function __invoke($args, $assoc_args)
     {
         $this->ensureLogin();
         $sites = new Sites();
@@ -79,47 +47,39 @@ class Lockdown extends CommandWithSSH
             $this->input()->siteName(['args' => $assoc_args])
         );
         $env = $site->environments->get('dev');
-				$git_mode = false;
-				
-        if ($env->info('connection_mode') != 'sftp') {
-	        $git_mode = true;
-	        $connection_args = array('mode' => 'sftp');
-	        $connection_mode = $env->setConnectionMode(true, $connection_args);
-	        if(!$connection_mode){
-		        $this->log()->warning(
-	            "The site had an issue in changing from Git mode. Please check that the code repository is
-	            up to date and try again."
-	          );
-						return;
-	        }
+
+        if ($env->get('connection_mode') != 'sftp') {
+            $git_mode = true;
+            $env->changeConnectionMode('sftp')->wait();
         } else {
-	        //Ensure we don't have any changed files we'll commit over top our commits.
-	        $diff = $env->diffstat();
-        	$count = count((array)$diff);
-        	if ($count !== 0){
-	        	$this->log()->warning(
-	            "Note: This site has changes to files that are not yet committed. If you want to install Lockr, 
-	            you will need to commit these changes first."
-	          );
-						return;
-        	}
+            $git_mode = false;
+            // Ensure we don't have any changed files we'll commit over top our commits.
+            $diff = $env->diffstat();
+            $count = count((array) $diff);
+            if ($count !== 0){
+                $this->log()->warning(
+                    'Note: This site has changes to files that are not yet committed. ' .
+                    'If you want to install Lockr, you will need to commit these changes first.'
+                );
+                return;
+            }
         }
 
         $fmwk = $site->get('framework');
 
         if ($fmwk === 'drupal') {
-            $this->callDrush('en -y lockr', $site, 'dev');
-            $this->callDrush('cc drush', $site, 'dev');
+            $this->callCommand('drush en -y lockr', $env);
+            $this->callCommand('drush cc drush', $env);
         } else {
-            $this->callWpCli('plugin install lockr --activate', $site, 'dev');
+            $this->callCommand('wp plugin install lockr --activate', $env);
         }
 
         $this->commit($env, 'Lockr module installed.');
 
         if ($fmwk === 'drupal') {
-            $this->callDrush('lockdown', $site, 'dev');
+            $this->callCommand('drush lockdown', $env);
         } else {
-            $this->callWpCli('lockr lockdown', $site, 'dev');
+            $this->callCommand('wp lockr lockdown', $env);
         }
 
         $this->commit($env, 'Lockr patches applied.');
@@ -127,26 +87,26 @@ class Lockdown extends CommandWithSSH
         $email = array_shift($args);
 
         if ($fmwk === 'drupal') {
-            $cmd = "lockr-register {$email}";
+            $cmd = "drush lockr-register {$email}";
             if (isset($assoc_args['password'])) {
                 $cmd .= " --password={$assoc_args['password']}";
             }
-            $this->callDrush($cmd, $site, 'dev');
         } else {
-            $cmd = "lockr register site --email={$email}";
+            $cmd = "wp lockr register site --email={$email}";
             if (isset($assoc_args['password'])) {
                 $cmd .= " --password={$assoc_args['password']}";
             }
-            $this->callWpCli($cmd, $site, 'dev');
         }
-        
+        $this->callCommand($cmd, $env);
+
         if ($git_mode){
-	        $diff = $env->diffstat();
-        	$count = count((array)$diff);
-        	if ($count === 0){
-	        	$connection_args = array('mode' => 'git');
-						$connection_mode = $env->setConnectionMode(true, $connection_args);
-        	}
+            $diff = $env->diffstat();
+            $count = count((array) $diff);
+            if ($count === 0){
+                // Re-get the site to prevent "already in git mode" message
+                $env = $site->environments->fetch()->get('dev');
+                $env->changeConnectionMode('git')->wait();
+            }
         }
     }
 }
