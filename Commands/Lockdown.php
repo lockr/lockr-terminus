@@ -4,45 +4,19 @@
 namespace Lockr\Commands;
 
 use Terminus\Commands\CommandWithSSH;
-use Terminus\Models\Collections\Sites;
+use Terminus\Commands\SiteCommand;
+use Terminus\Collections\Sites;
 
 /**
+ * Allows for sites to register and communicate with Lockr
+ *
  * @command lockdown
  */
 class Lockdown extends CommandWithSSH
 {
-    protected function callDrush($cmd, $site, $env) {
-        $this->client = 'Drush';
-        $this->command = 'drush';
-
-        $this->checkCommand($cmd);
-
-        $elements = array(
-            'site' => $site,
-            'env_id' => $env,
-            'command' => $cmd,
-            'server' => $this->getAppserverInfo(
-                array('site' => $site->get('id'), 'environment' => $env)
-            ),
-        );
-
-        return $this->sendCommand($elements);
-    }
-
-    protected function callWpCli($cmd, $site, $env) {
-        $this->client = 'WP-CLI';
-        $this->command = 'wp';
-
-        $elements = array(
-            'site' => $site,
-            'env_id' => $env,
-            'command' => $cmd,
-            'server' => $this->getAppserverInfo(
-                array('site' => $site->get('id'), 'environment' => $env)
-            ),
-        );
-
-        return $this->sendCommand($elements);
+    protected function callCommand($cmd, $env) {
+        $this->ensureCommandIsPermitted($cmd);
+        $env->sendCommandViaSSH($cmd);
     }
 
     protected function commit($env, $msg) {
@@ -74,26 +48,38 @@ class Lockdown extends CommandWithSSH
         );
         $env = $site->environments->get('dev');
 
-        if ($env->info('connection_mode') != 'sftp') {
-            $this->checkConnectionMode($env);
-            return;
+        if ($env->get('connection_mode') != 'sftp') {
+            $git_mode = true;
+            $env->changeConnectionMode('sftp')->wait();
+        } else {
+            $git_mode = false;
+            // Ensure we don't have any changed files we'll commit over top our commits.
+            $diff = $env->diffstat();
+            $count = count((array) $diff);
+            if ($count !== 0){
+                $this->log()->warning(
+                    'Note: This site has changes to files that are not yet committed. ' .
+                    'If you want to install Lockr, you will need to commit these changes first.'
+                );
+                return;
+            }
         }
 
         $fmwk = $site->get('framework');
 
         if ($fmwk === 'drupal') {
-            $this->callDrush('en -y lockr', $site, 'dev');
-            $this->callDrush('cc drush', $site, 'dev');
+            $this->callCommand('drush en -y lockr', $env);
+            $this->callCommand('drush cc drush', $env);
         } else {
-            $this->callWpCli('plugin install lockr --activate', $site, 'dev');
+            $this->callCommand('wp plugin install lockr --activate', $env);
         }
 
         $this->commit($env, 'Lockr module installed.');
 
         if ($fmwk === 'drupal') {
-            $this->callDrush('lockdown', $site, 'dev');
+            $this->callCommand('drush lockdown', $env);
         } else {
-            $this->callWpCli('lockr lockdown', $site, 'dev');
+            $this->callCommand('wp lockr lockdown', $env);
         }
 
         $this->commit($env, 'Lockr patches applied.');
@@ -101,17 +87,26 @@ class Lockdown extends CommandWithSSH
         $email = array_shift($args);
 
         if ($fmwk === 'drupal') {
-            $cmd = "lockr-register {$email}";
+            $cmd = "drush lockr-register {$email}";
             if (isset($assoc_args['password'])) {
                 $cmd .= " --password={$assoc_args['password']}";
             }
-            $this->callDrush($cmd, $site, 'dev');
         } else {
-            $cmd = "lockr register site --email={$email}";
+            $cmd = "wp lockr register site --email={$email}";
             if (isset($assoc_args['password'])) {
                 $cmd .= " --password={$assoc_args['password']}";
             }
-            $this->callWpCli($cmd, $site, 'dev');
+        }
+        $this->callCommand($cmd, $env);
+
+        if ($git_mode){
+            $diff = $env->diffstat();
+            $count = count((array) $diff);
+            if ($count === 0){
+                // Re-get the site to prevent "already in git mode" message
+                $env = $site->environments->fetch()->get('dev');
+                $env->changeConnectionMode('git')->wait();
+            }
         }
     }
 }
