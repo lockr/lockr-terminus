@@ -7,5 +7,14 @@
             "email": "tynor@lockr.io"
         }
     ],
-    "require": {}
+    "type": "terminus-plugin",
+    "require": {},
+    "autoload": {
+        "psr-4": {"Pantheon\\Lockr\\": "src"}
+    },
+    "extra": {
+        "terminus": {
+            "compatible-version": "^1"
+        }
+    }
 }
