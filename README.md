@@ -7,7 +7,7 @@ using proper API and encryption key management.
 ## Installation
 
 ```
-mkdir -p ~/terminus/plugins && cd ~/terminus/plugins
+mkdir -p ~/.terminus/plugins && cd ~/.terminus/plugins
 git clone https://github.com/lockr/lockr-terminus
 ```
 
