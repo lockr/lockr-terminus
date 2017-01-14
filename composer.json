@@ -1,6 +1,7 @@
 {
     "name": "lockr/lockr-terminus",
     "description": "The Lockr key management platform.",
+    "license": "MIT",
     "authors": [
         {
             "name": "Tynor Fujimoto",
