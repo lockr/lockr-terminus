@@ -16,16 +16,14 @@ git clone https://github.com/lockr/lockr-terminus
 Use the "lockdown" command to install Lockr on your site and patch
 modules/plugins.
 
-Note that the target site must be in SFTP mode.
-
 ```
-terminus lockdown --site=sitename alice@example.com
+terminus lockdown sitename alice@example.com
 ```
 
 If you have already signed up with Lockr, a login password is required
 to authenticate with our backend.
 
 ```
-terminus lockdown --site=sitename --password='alicepassword' alice@example.com
+terminus lockdown sitename alice@example.com 'alicepassword'
 ```
 
