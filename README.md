@@ -6,6 +6,14 @@ using proper API and encryption key management.
 
 ## Installation
 
+Via Composer (recommended):
+
+```
+composer create-project -d ~/.terminus/plugins/ lockr/lockr-terminus:~1
+```
+
+Via Git:
+
 ```
 mkdir -p ~/.terminus/plugins && cd ~/.terminus/plugins
 git clone https://github.com/lockr/lockr-terminus
