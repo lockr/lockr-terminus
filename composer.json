@@ -1,6 +1,6 @@
 {
     "name": "lockr/lockr-terminus",
-    "description": "The Lockr key management platform.",
+    "description": "The Lockr terminus plugin for single-command installation and registration.",
     "license": "MIT",
     "authors": [
         {
